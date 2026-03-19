@@ -169,33 +169,13 @@ class DrowsinessDetector:
                             scale=0.35, color=COLOR_WARN)
 
     def _draw_alert_overlay(self, frame):
-        """Draw full-screen drowsiness alert."""
+        """Draw red vignette border only — frontend handles the alert text."""
         h, w = frame.shape[:2]
-
-        # Red vignette border
         overlay = frame.copy()
         for i, thickness in enumerate([60, 40, 20]):
-            alpha = 0.15 + i * 0.05
+            alpha = 0.12 + i * 0.04
             cv2.rectangle(overlay, (0, 0), (w, h), COLOR_DANGER, thickness)
             cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-
-        # Alert banner background
-        banner_h = 70
-        banner_y = h // 2 - banner_h // 2
-        self._draw_rounded_rect(frame,
-                                w // 2 - 220, banner_y,
-                                440, banner_h,
-                                (20, 10, 180), alpha=0.85)
-
-        # Alert text
-        cv2.putText(frame, "DROWSINESS DETECTED",
-                    (w // 2 - 195, banner_y + 30),
-                    cv2.FONT_HERSHEY_DUPLEX, 0.75,
-                    COLOR_WHITE, 1, cv2.LINE_AA)
-        cv2.putText(frame, "PLEASE TAKE A BREAK",
-                    (w // 2 - 168, banner_y + 54),
-                    cv2.FONT_HERSHEY_DUPLEX, 0.58,
-                    (200, 180, 180), 1, cv2.LINE_AA)
 
     def process_frame(self, frame, ear_threshold=None, closed_frames=None):
         threshold   = ear_threshold or EAR_THRESHOLD
