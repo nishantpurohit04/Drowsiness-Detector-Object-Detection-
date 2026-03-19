@@ -1,761 +1,1005 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DrowsGuard — Drowsiness Detection</title>
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet"/>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DrowsGuard</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:       #0a0806;
+  --warm1:    #f5a623;
+  --warm2:    #e8813a;
+  --gold:     #d4a843;
+  --teal:     #4ecdc4;
+  --cream:    #f0e8d8;
+  --muted:    #6b5c48;
+  --panel:    rgba(20,15,10,0.85);
+  --danger:   #e84040;
+  --safe:     #4ecdc4;
+  --warn:     #f5a623;
+  --mono:     'DM Mono', monospace;
+  --serif:    'Fraunces', serif;
+}
 
-  <style>
-    :root {
-      --bg:        #080c10;
-      --panel:     #0d1117;
-      --border:    #1e2d3d;
-      --accent:    #00e5ff;
-      --warn:      #ff9800;
-      --danger:    #ff1744;
-      --safe:      #00e676;
-      --text:      #cdd9e5;
-      --muted:     #546e7a;
-      --mono:      'Share Tech Mono', monospace;
-      --sans:      'Barlow', sans-serif;
-      --cond:      'Barlow Condensed', sans-serif;
-    }
+*{margin:0;padding:0;box-sizing:border-box;}
 
-    * { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  color: var(--cream);
+  font-family: var(--mono);
+  height: 100vh;
+  overflow: hidden;
+  cursor: none;
+}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
+/* ── CUSTOM CURSOR ── */
+.cursor {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--warm1);
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  transform: translate(-50%,-50%);
+  transition: transform 0.1s, width 0.2s, height 0.2s;
+  mix-blend-mode: screen;
+}
+.cursor-ring {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.4);
+  position: fixed;
+  pointer-events: none;
+  z-index: 99998;
+  transform: translate(-50%,-50%);
+  transition: transform 0.15s ease-out, width 0.3s, height 0.3s, border-color 0.3s;
+}
 
-    /* ── SCANLINE OVERLAY ── */
-    body::before {
-      content: '';
-      position: fixed; inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0,229,255,0.015) 2px,
-        rgba(0,229,255,0.015) 4px
-      );
-      pointer-events: none;
-      z-index: 9999;
-    }
+/* ── ANIMATED BACKGROUND ── */
+.bg-canvas {
+  position: fixed; inset: 0;
+  z-index: 0;
+}
 
-    /* ── HEADER ── */
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 16px 32px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--panel);
-    }
+/* ── GRAIN OVERLAY ── */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:9997;
+  opacity:0.6;
+}
 
-    .logo {
-      font-family: var(--cond);
-      font-size: 1.6rem;
-      font-weight: 900;
-      letter-spacing: 0.15em;
-      color: var(--accent);
-      text-transform: uppercase;
-    }
-    .logo span { color: var(--text); }
+/* ── LAYOUT ── */
+.layout {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  grid-template-rows: 56px 1fr 80px;
+  height: 100vh;
+  gap: 0;
+}
 
-    .status-bar {
-      display: flex;
-      gap: 24px;
-      align-items: center;
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      color: var(--muted);
-    }
+/* ── HEADER ── */
+header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  border-bottom: 1px solid rgba(212,168,67,0.12);
+}
 
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-      display: inline-block;
-      margin-right: 6px;
-      transition: background 0.3s;
-    }
-    .status-dot.connected { background: var(--safe); box-shadow: 0 0 6px var(--safe); }
-    .status-dot.alert     { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: blink 0.5s infinite; }
+.wordmark {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 300;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.wordmark em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--cream);
+}
 
-    @keyframes blink { 50% { opacity: 0; } }
+.header-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.pulse-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.pulse-dot.live {
+  background: var(--teal);
+  box-shadow: 0 0 8px var(--teal);
+  animation: pulse-anim 2s infinite;
+}
+.pulse-dot.alert { background: var(--danger); box-shadow: 0 0 10px var(--danger); animation: fast-pulse 0.4s infinite; }
+@keyframes pulse-anim { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes fast-pulse { 50%{opacity:0} }
 
-    /* ── MAIN LAYOUT ── */
-    .main {
-      display: grid;
-      grid-template-columns: 1fr 320px;
-      gap: 0;
-      height: calc(100vh - 65px);
-    }
+.header-time {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
 
-    /* ── VIDEO PANEL ── */
-    .video-panel {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #000;
-      overflow: hidden;
-    }
+/* ── LEFT PANEL ── */
+.left-panel {
+  grid-row: 2;
+  border-right: 1px solid rgba(212,168,67,0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 24px;
+  gap: 28px;
+}
 
-    #videoEl    { display: none; }
+.stat-block { display: flex; flex-direction: column; gap: 4px; }
+.stat-label {
+  font-size: 0.48rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stat-num {
+  font-family: var(--serif);
+  font-size: 2.2rem;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--cream);
+  transition: color 0.4s;
+}
+.stat-num.danger { color: var(--danger); }
+.stat-num.safe   { color: var(--teal); }
 
-    #outputCanvas {
-      max-width: 100%;
-      max-height: 100%;
-      border: none;
-    }
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,168,67,0.2), transparent);
+}
 
-    /* Corner brackets */
-    .video-panel::before,
-    .video-panel::after {
-      content: '';
-      position: absolute;
-      width: 40px; height: 40px;
-      border-color: var(--accent);
-      border-style: solid;
-      opacity: 0.6;
-    }
-    .video-panel::before { top:16px; left:16px; border-width: 2px 0 0 2px; }
-    .video-panel::after  { bottom:16px; right:16px; border-width: 0 2px 2px 0; }
+/* ── CENTER VIDEO ── */
+.center-stage {
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
 
-    /* ── ALERT OVERLAY ON VIDEO ── */
-    .alert-flash {
-      position: absolute;
-      inset: 0;
-      border: 3px solid var(--danger);
-      background: rgba(255, 23, 68, 0.07);
-      display: none;
-      pointer-events: none;
-      animation: pulse-border 0.5s infinite;
-    }
-    .alert-flash.active { display: block; }
-    @keyframes pulse-border { 50% { border-color: transparent; } }
+.iris-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-    .alert-label {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: var(--cond);
-      font-size: 2.2rem;
-      font-weight: 900;
-      letter-spacing: 0.2em;
-      color: var(--danger);
-      text-shadow: 0 0 20px var(--danger);
-      display: none;
-      text-align: center;
-      pointer-events: none;
-    }
-    .alert-label.active { display: block; }
+/* Animated iris rings */
+.iris-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid;
+  pointer-events: none;
+  transition: border-color 0.5s, transform 0.5s, opacity 0.5s;
+}
+.iris-ring-1 {
+  width: calc(100% + 24px);
+  height: calc(100% + 24px);
+  border-color: rgba(212,168,67,0.3);
+  animation: rotate-slow 20s linear infinite;
+}
+.iris-ring-2 {
+  width: calc(100% + 44px);
+  height: calc(100% + 44px);
+  border-color: rgba(212,168,67,0.15);
+  animation: rotate-slow 35s linear infinite reverse;
+  border-style: dashed;
+}
+.iris-ring-3 {
+  width: calc(100% + 68px);
+  height: calc(100% + 68px);
+  border-color: rgba(78,205,196,0.08);
+  animation: rotate-slow 60s linear infinite;
+}
 
-    .no-feed {
-      position: absolute;
-      text-align: center;
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 0.85rem;
-    }
-    .no-feed .icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.3; }
+@keyframes rotate-slow { to { transform: rotate(360deg); } }
 
-    /* ── SIDEBAR ── */
-    .sidebar {
-      background: var(--panel);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-    }
+.iris-ring-1.alert-ring { border-color: rgba(232,64,64,0.7); animation: rotate-fast 3s linear infinite; }
+.iris-ring-2.alert-ring { border-color: rgba(232,64,64,0.4); }
+@keyframes rotate-fast { to { transform: rotate(360deg); } }
 
-    .section {
-      padding: 20px;
-      border-bottom: 1px solid var(--border);
-    }
+/* tick marks on outer ring */
+.iris-ticks {
+  position: absolute;
+  width: calc(100% + 90px);
+  height: calc(100% + 90px);
+  border-radius: 50%;
+  pointer-events: none;
+}
 
-    .section-title {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      color: var(--muted);
-      text-transform: uppercase;
-      margin-bottom: 14px;
-    }
+.video-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  width: min(42vh, 380px);
+  height: min(42vh, 380px);
+  background: #050403;
+  box-shadow:
+    0 0 0 1px rgba(212,168,67,0.2),
+    inset 0 0 60px rgba(0,0,0,0.8),
+    0 0 80px rgba(212,168,67,0.05);
+}
 
-    /* ── EAR METER ── */
-    .ear-value {
-      font-family: var(--mono);
-      font-size: 3rem;
-      font-weight: 400;
-      line-height: 1;
-      color: var(--safe);
-      transition: color 0.3s;
-    }
-    .ear-value.warning { color: var(--warn); }
-    .ear-value.danger  { color: var(--danger); }
+#videoEl { display: none; }
+#outputCanvas {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: none;
+}
 
-    .ear-bar-track {
-      margin-top: 12px;
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-      position: relative;
-    }
-    .ear-bar-fill {
-      height: 100%;
-      width: 60%;
-      border-radius: 3px;
-      background: var(--safe);
-      transition: width 0.15s ease, background 0.3s;
-    }
-    .threshold-line {
-      position: absolute;
-      top: -4px;
-      height: 14px;
-      width: 2px;
-      background: var(--warn);
-      /* position set by JS */
-    }
+.no-feed-center {
+  position: absolute; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.eye-icon {
+  font-size: 2.5rem;
+  opacity: 0.15;
+  animation: blink-eye 4s ease-in-out infinite;
+}
+@keyframes blink-eye {
+  0%,90%,100%{ opacity:0.15; transform:scaleY(1); }
+  95%{ opacity:0.08; transform:scaleY(0.1); }
+}
+.no-feed-text {
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
-    .ear-labels {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 6px;
-      font-family: var(--mono);
-      font-size: 0.6rem;
-      color: var(--muted);
-    }
+/* Alert flash on video */
+.video-alert-overlay {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: rgba(232,64,64,0);
+  pointer-events: none;
+  transition: background 0.3s;
+}
+.video-alert-overlay.active {
+  animation: flash-red 0.5s ease-in-out infinite;
+}
+@keyframes flash-red {
+  0%,100%{ background: rgba(232,64,64,0); }
+  50%{ background: rgba(232,64,64,0.12); }
+}
 
-    /* ── STATS GRID ── */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
+/* EAR arc gauge below video */
+.ear-arc-wrap {
+  position: absolute;
+  bottom: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.ear-arc-label {
+  font-size: 0.48rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ear-big-num {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  font-weight: 300;
+  color: var(--cream);
+  transition: color 0.4s;
+  letter-spacing: 0.1em;
+}
+.ear-big-num.danger { color: var(--danger); }
+.ear-big-num.warn   { color: var(--warn); }
+.ear-big-num.safe   { color: var(--teal); }
 
-    .stat-card {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 12px;
-    }
+/* Alert banner */
+.alert-banner {
+  position: absolute;
+  bottom: -110px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(232,64,64,0.12);
+  border: 1px solid rgba(232,64,64,0.4);
+  border-radius: 2px;
+  padding: 8px 24px;
+  display: none;
+  white-space: nowrap;
+}
+.alert-banner.active { display: block; animation: banner-pulse 0.6s ease-in-out infinite; }
+@keyframes banner-pulse { 50%{ border-color: rgba(232,64,64,0.9); background: rgba(232,64,64,0.22); } }
+.alert-banner-text {
+  font-size: 0.58rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
 
-    .stat-label {
-      font-family: var(--mono);
-      font-size: 0.6rem;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
+/* ── RIGHT PANEL ── */
+.right-panel {
+  grid-row: 2;
+  border-left: 1px solid rgba(212,168,67,0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 20px;
+  gap: 20px;
+}
 
-    .stat-value {
-      font-family: var(--mono);
-      font-size: 1.5rem;
-      color: var(--accent);
-      margin-top: 4px;
-    }
+/* Slim EAR bar */
+.ear-track-wrap { display: flex; flex-direction: column; gap: 8px; }
+.ear-track-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.48rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ear-track {
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  position: relative;
+  overflow: visible;
+}
+.ear-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--teal);
+  transition: width 0.15s ease, background 0.3s;
+  position: relative;
+}
+.ear-fill::after {
+  content: '';
+  position: absolute;
+  right: 0; top: -3px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: inherit;
+  box-shadow: 0 0 6px currentColor;
+}
+.thresh-marker {
+  position: absolute;
+  top: -5px;
+  width: 1px; height: 13px;
+  background: var(--gold);
+  opacity: 0.7;
+}
 
-    /* ── ALERT HISTORY ── */
-    .alert-log {
-      max-height: 140px;
-      overflow-y: auto;
-      font-family: var(--mono);
-      font-size: 0.68rem;
-    }
+/* Individual eye */
+.eye-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.eye-label { font-size: 0.48rem; letter-spacing:0.2em; color: var(--muted); text-transform: uppercase; }
+.eye-val   { font-size: 0.72rem; color: var(--cream); transition: color 0.3s; }
+.eye-mini-bar {
+  flex: 1;
+  height: 2px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.eye-mini-fill {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 1px;
+  transition: width 0.15s, background 0.3s;
+}
 
-    .log-entry {
-      padding: 5px 0;
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
-      display: flex;
-      gap: 10px;
-    }
-    .log-entry .time  { color: var(--accent); }
-    .log-entry .event { color: var(--warn); }
+/* Alert log */
+.log-section { display: flex; flex-direction: column; gap: 6px; }
+.log-title {
+  font-size: 0.45rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid rgba(212,168,67,0.08);
+  padding-bottom: 4px;
+}
+.log-scroll { max-height: 90px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.log-scroll::-webkit-scrollbar { display: none; }
+.log-item {
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.log-item .lt { color: rgba(212,168,67,0.5); flex-shrink: 0; }
+.log-item .lm { color: var(--warm2); }
 
-    /* ── CONTROLS ── */
-    .controls { display: flex; flex-direction: column; gap: 14px; }
+/* ── BOTTOM BAR ── */
+.bottom-bar {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  border-top: 1px solid rgba(212,168,67,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  gap: 24px;
+}
 
-    .btn {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid;
-      border-radius: 3px;
-      font-family: var(--cond);
-      font-size: 0.9rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all 0.2s;
-      background: transparent;
-    }
+/* Sliders */
+.slider-group { display: flex; align-items: center; gap: 10px; }
+.slider-name  { font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.slider-val   { font-size: 0.55rem; color: var(--gold); width: 32px; text-align: right; }
+input[type=range] {
+  -webkit-appearance: none;
+  width: 90px; height: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(212,168,67,0.5);
+}
 
-    .btn-start {
-      border-color: var(--safe);
-      color: var(--safe);
-    }
-    .btn-start:hover  { background: var(--safe); color: var(--bg); }
-    .btn-start:active { transform: scale(0.98); }
+/* Buttons */
+.btn-group { display: flex; gap: 10px; }
+.btn {
+  padding: 7px 20px;
+  border: 1px solid;
+  border-radius: 1px;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.2s;
+}
+.btn-start { border-color: rgba(78,205,196,0.4); color: var(--teal); }
+.btn-start:hover { background: rgba(78,205,196,0.1); border-color: var(--teal); }
+.btn-stop  { border-color: rgba(232,64,64,0.4); color: var(--danger); display:none; }
+.btn-stop:hover  { background: rgba(232,64,64,0.1); border-color: var(--danger); }
+.btn-reset { border-color: rgba(212,168,67,0.2); color: var(--muted); }
+.btn-reset:hover { border-color: var(--gold); color: var(--gold); }
 
-    .btn-stop {
-      border-color: var(--danger);
-      color: var(--danger);
-      display: none;
-    }
-    .btn-stop:hover  { background: var(--danger); color: #fff; }
-    .btn-reset {
-      border-color: var(--border);
-      color: var(--muted);
-    }
-    .btn-reset:hover { border-color: var(--warn); color: var(--warn); }
+.fps-chip {
+  font-size: 0.48rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 1px;
+}
 
-    /* ── SLIDER ── */
-    .slider-row { display: flex; flex-direction: column; gap: 6px; }
+/* ── STATUS ORBS ── */
+.status-row { display: flex; flex-direction: column; gap: 10px; }
+.status-item { display: flex; align-items: center; gap: 8px; }
+.status-orb {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.status-orb.on { background: var(--teal); box-shadow: 0 0 5px var(--teal); }
+.status-orb.danger { background: var(--danger); box-shadow: 0 0 5px var(--danger); animation: fast-pulse 0.4s infinite; }
+.status-text { font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+.status-text.on     { color: var(--cream); }
+.status-text.danger { color: var(--danger); }
 
-    .slider-header {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.75rem;
-    }
-    .slider-name  { color: var(--text); }
-    .slider-val   { font-family: var(--mono); color: var(--accent); }
+/* Closed frames progress */
+.frames-bar-wrap { display: flex; flex-direction: column; gap: 4px; }
+.frames-label {
+  display: flex; justify-content: space-between;
+  font-size: 0.45rem; letter-spacing: 0.15em; color: var(--muted);
+  text-transform: uppercase;
+}
+.frames-track { height: 2px; background: rgba(255,255,255,0.05); border-radius: 1px; overflow: hidden; }
+.frames-fill  { height: 100%; width: 0%; background: var(--warn); border-radius: 1px; transition: width 0.2s, background 0.3s; }
 
-    input[type=range] {
-      width: 100%;
-      accent-color: var(--accent);
-      height: 4px;
-    }
-
-    /* ── FPS BADGE ── */
-    .fps-badge {
-      position: absolute;
-      bottom: 16px;
-      left: 16px;
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      color: var(--muted);
-      background: rgba(8,12,16,0.7);
-      padding: 4px 8px;
-      border-radius: 2px;
-      border: 1px solid var(--border);
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-  </style>
+canvas#bgCanvas { position: fixed; inset: 0; z-index: 0; }
+canvas#capCanvas { display: none; }
+</style>
 </head>
 <body>
 
-<!-- ── HEADER ── -->
-<header>
-  <div class="logo">Drows<span>Guard</span></div>
-  <div class="status-bar">
-    <div>
-      <span class="status-dot" id="connDot"></span>
-      <span id="connText">DISCONNECTED</span>
+<canvas id="bgCanvas"></canvas>
+<div class="cursor" id="cur"></div>
+<div class="cursor-ring" id="curRing"></div>
+
+<div class="layout">
+
+  <!-- HEADER -->
+  <header>
+    <div class="wordmark">Drows<em>Guard</em></div>
+    <div class="header-center">
+      <div class="pulse-dot" id="pulseDot"></div>
+      <span id="connLabel">offline</span>
     </div>
-    <div id="timeDisplay">00:00:00</div>
+    <div class="header-time" id="clockEl">--:--:--</div>
+  </header>
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="stat-block">
+      <div class="stat-label">Alerts Total</div>
+      <div class="stat-num" id="statAlerts">0</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat-block">
+      <div class="stat-label">Duration</div>
+      <div class="stat-num" id="statDur">0:00</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat-block">
+      <div class="stat-label">Status</div>
+      <div class="stat-num safe" id="statStatus" style="font-size:1rem;letter-spacing:0.08em;">IDLE</div>
+    </div>
+    <div class="divider"></div>
+    <div class="status-row">
+      <div class="status-item">
+        <div class="status-orb" id="orbConn"></div>
+        <div class="status-text" id="orbConnTxt">Disconnected</div>
+      </div>
+      <div class="status-item">
+        <div class="status-orb" id="orbFace"></div>
+        <div class="status-text" id="orbFaceTxt">No Face</div>
+      </div>
+    </div>
   </div>
-</header>
 
-<!-- ── MAIN ── -->
-<div class="main">
+  <!-- CENTER STAGE -->
+  <div class="center-stage">
+    <div class="iris-container">
+      <div class="iris-ring iris-ring-3" id="irisR3"></div>
+      <div class="iris-ring iris-ring-2" id="irisR2"></div>
+      <div class="iris-ring iris-ring-1" id="irisR1"></div>
 
-  <!-- VIDEO PANEL -->
-  <div class="video-panel" id="videoPanel">
-    <div class="no-feed" id="noFeed">
-      <div class="icon">👁</div>
-      Press START MONITORING to begin
+      <div class="video-wrapper" id="videoWrap">
+        <video id="videoEl" autoplay playsinline muted></video>
+        <canvas id="outputCanvas"></canvas>
+        <div class="no-feed-center" id="noFeed">
+          <div class="eye-icon">◉</div>
+          <div class="no-feed-text">Awaiting signal</div>
+        </div>
+        <div class="video-alert-overlay" id="videoAlertOverlay"></div>
+      </div>
+
+      <div class="ear-arc-wrap">
+        <div class="ear-arc-label">Eye Aspect Ratio</div>
+        <div class="ear-big-num safe" id="earBigNum">0.000</div>
+      </div>
+
+      <div class="alert-banner" id="alertBanner">
+        <div class="alert-banner-text">⚠ Drowsiness Detected — Please Wake Up</div>
+      </div>
     </div>
-
-    <video id="videoEl" autoplay playsinline muted></video>
-    <canvas id="outputCanvas"></canvas>
-
-    <div class="alert-flash" id="alertFlash"></div>
-    <div class="alert-label" id="alertLabel">⚠ DROWSINESS<br>DETECTED</div>
-    <div class="fps-badge" id="fpsBadge">-- FPS</div>
-    <canvas id="captureCanvas" style="display:none;"></canvas>
   </div>
 
-  <!-- SIDEBAR -->
-  <div class="sidebar">
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
 
-    <!-- EAR METER -->
-    <div class="section">
-      <div class="section-title">Eye Aspect Ratio</div>
-      <div class="ear-value" id="earVal">0.000</div>
-      <div class="ear-bar-track">
-        <div class="ear-bar-fill" id="earBar"></div>
-        <div class="threshold-line" id="threshLine"></div>
+    <div class="ear-track-wrap">
+      <div class="ear-track-label">
+        <span>EAR Range</span>
+        <span>0 → 0.40</span>
       </div>
-      <div class="ear-labels">
-        <span>0.00</span>
-        <span id="threshLabel">Threshold</span>
-        <span>0.40</span>
+      <div class="ear-track">
+        <div class="ear-fill" id="earFill" style="width:60%"></div>
+        <div class="thresh-marker" id="threshMark"></div>
       </div>
     </div>
 
-    <!-- STATS -->
-    <div class="section">
-      <div class="section-title">Session Stats</div>
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Alerts</div>
-          <div class="stat-value" id="statAlerts">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Duration</div>
-          <div class="stat-value" id="statDuration">0:00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Closed Frames</div>
-          <div class="stat-value" id="statFrames">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Status</div>
-          <div class="stat-value" id="statStatus" style="font-size:0.9rem; color: var(--muted);">IDLE</div>
-        </div>
+    <div class="divider"></div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div class="eye-row">
+        <div class="eye-label">Left</div>
+        <div class="eye-mini-bar"><div class="eye-mini-fill" id="leftFill" style="width:60%"></div></div>
+        <div class="eye-val" id="leftVal">0.000</div>
+      </div>
+      <div class="eye-row">
+        <div class="eye-label">Right</div>
+        <div class="eye-mini-bar"><div class="eye-mini-fill" id="rightFill" style="width:60%"></div></div>
+        <div class="eye-val" id="rightVal">0.000</div>
       </div>
     </div>
 
-    <!-- ALERT LOG -->
-    <div class="section">
-      <div class="section-title">Alert Log</div>
-      <div class="alert-log" id="alertLog">
-        <div class="log-entry">
-          <span class="time">--:--:--</span>
-          <span>Waiting for session...</span>
-        </div>
+    <div class="divider"></div>
+
+    <div class="frames-bar-wrap">
+      <div class="frames-label">
+        <span>Closed Frames</span>
+        <span id="framesLabel">0</span>
+      </div>
+      <div class="frames-track">
+        <div class="frames-fill" id="framesFill"></div>
       </div>
     </div>
 
-    <!-- SETTINGS -->
-    <div class="section">
-      <div class="section-title">Settings</div>
-      <div style="display:flex; flex-direction:column; gap:14px;">
-        <div class="slider-row">
-          <div class="slider-header">
-            <span class="slider-name">EAR Threshold</span>
-            <span class="slider-val" id="earThreshVal">0.18</span>
-          </div>
-          <input type="range" id="earThreshSlider" min="0.10" max="0.30" step="0.01" value="0.18"/>
-        </div>
-        <div class="slider-row">
-          <div class="slider-header">
-            <span class="slider-name">Alert Sensitivity (frames)</span>
-            <span class="slider-val" id="frameVal">20</span>
-          </div>
-          <input type="range" id="frameSlider" min="5" max="40" step="1" value="20"/>
+    <div class="divider"></div>
+
+    <div class="log-section">
+      <div class="log-title">Event Log</div>
+      <div class="log-scroll" id="logScroll">
+        <div class="log-item">
+          <span class="lt">--:--</span>
+          <span>Waiting for session</span>
         </div>
       </div>
     </div>
 
-    <!-- CONTROLS -->
-    <div class="section">
-      <div class="controls">
-        <button class="btn btn-start" id="btnStart" onclick="startMonitoring()">▶ Start Monitoring</button>
-        <button class="btn btn-stop"  id="btnStop"  onclick="stopMonitoring()">■ Stop Monitoring</button>
-        <button class="btn btn-reset"               onclick="resetSession()">↺ Reset Session</button>
-      </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bottom-bar">
+    <div class="btn-group">
+      <button class="btn btn-start" id="btnStart" onclick="startMonitoring()">▶ Start</button>
+      <button class="btn btn-stop"  id="btnStop"  onclick="stopMonitoring()">■ Stop</button>
+      <button class="btn btn-reset"               onclick="resetSession()">↺ Reset</button>
     </div>
 
-  </div><!-- /sidebar -->
-</div><!-- /main -->
+    <div class="slider-group">
+      <span class="slider-name">EAR Threshold</span>
+      <input type="range" id="earSlider" min="0.10" max="0.35" step="0.01" value="0.20"/>
+      <span class="slider-val" id="earSliderVal">0.20</span>
+    </div>
+
+    <div class="slider-group">
+      <span class="slider-name">Sensitivity</span>
+      <input type="range" id="frameSlider" min="5" max="40" step="1" value="10"/>
+      <span class="slider-val" id="frameSliderVal">10</span>
+    </div>
+
+    <div class="fps-chip" id="fpsChip">-- fps</div>
+  </div>
+
+</div>
+
+<canvas id="capCanvas"></canvas>
 
 <script>
-// ── STATE ────────────────────────────────────────────────────────────────────
-let ws            = null;
-let stream        = null;
-let running       = false;
-let sessionStart  = null;
-let frameCount    = 0;
-let lastFpsTime   = Date.now();
-let alertBeepCtx  = null;
-
-// Settings
-let earThreshold  = 0.18;
-let closedFrames  = 20;
-
-// ── DOM REFS ─────────────────────────────────────────────────────────────────
-const videoEl       = document.getElementById('videoEl');
-const outputCanvas  = document.getElementById('outputCanvas');
-const captureCanvas = document.getElementById('captureCanvas');
-const ctx           = outputCanvas.getContext('2d');
-const capCtx        = captureCanvas.getContext('2d');
-
-// ── SLIDER LISTENERS ─────────────────────────────────────────────────────────
-document.getElementById('earThreshSlider').addEventListener('input', e => {
-  earThreshold = parseFloat(e.target.value);
-  document.getElementById('earThreshVal').textContent = earThreshold.toFixed(2);
-  updateThresholdLine();
+// ── CURSOR ────────────────────────────────────────────────────────────────────
+const cur = document.getElementById('cur');
+const curRing = document.getElementById('curRing');
+document.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top  = e.clientY + 'px';
+  setTimeout(() => {
+    curRing.style.left = e.clientX + 'px';
+    curRing.style.top  = e.clientY + 'px';
+  }, 80);
 });
 
+// ── BACKGROUND ANIMATION ─────────────────────────────────────────────────────
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx    = bgCanvas.getContext('2d');
+let bgW, bgH;
+
+function resizeBg() {
+  bgW = bgCanvas.width  = window.innerWidth;
+  bgH = bgCanvas.height = window.innerHeight;
+}
+resizeBg();
+window.addEventListener('resize', resizeBg);
+
+const orbs = Array.from({length: 4}, (_, i) => ({
+  x: Math.random() * bgW,
+  y: Math.random() * bgH,
+  r: 200 + Math.random() * 300,
+  vx: (Math.random() - 0.5) * 0.3,
+  vy: (Math.random() - 0.5) * 0.3,
+  hue: [28, 40, 180, 200][i],
+  sat: [60, 45, 50, 40][i],
+}));
+
+function drawBg() {
+  bgCtx.clearRect(0, 0, bgW, bgH);
+  bgCtx.fillStyle = '#0a0806';
+  bgCtx.fillRect(0, 0, bgW, bgH);
+
+  orbs.forEach(o => {
+    o.x += o.vx; o.y += o.vy;
+    if (o.x < -o.r || o.x > bgW + o.r) o.vx *= -1;
+    if (o.y < -o.r || o.y > bgH + o.r) o.vy *= -1;
+    const g = bgCtx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+    g.addColorStop(0, `hsla(${o.hue},${o.sat}%,20%,0.18)`);
+    g.addColorStop(1, 'transparent');
+    bgCtx.fillStyle = g;
+    bgCtx.beginPath();
+    bgCtx.arc(o.x, o.y, o.r, 0, Math.PI*2);
+    bgCtx.fill();
+  });
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let ws = null, stream = null, running = false;
+let sessionStart = null, frameCount = 0, lastFpsTime = Date.now();
+let alertBeepCtx = null, beepInterval = null;
+let earThreshold = 0.20, closedFrames = 10;
+let lastAlertCount = 0;
+
+const videoEl     = document.getElementById('videoEl');
+const outCanvas   = document.getElementById('outputCanvas');
+const capCanvas   = document.getElementById('capCanvas');
+const outCtx      = outCanvas.getContext('2d');
+const capCtx      = capCanvas.getContext('2d');
+
+// ── SLIDERS ───────────────────────────────────────────────────────────────────
+document.getElementById('earSlider').addEventListener('input', e => {
+  earThreshold = parseFloat(e.target.value);
+  document.getElementById('earSliderVal').textContent = earThreshold.toFixed(2);
+  updateThreshLine();
+});
 document.getElementById('frameSlider').addEventListener('input', e => {
   closedFrames = parseInt(e.target.value);
-  document.getElementById('frameVal').textContent = closedFrames;
+  document.getElementById('frameSliderVal').textContent = closedFrames;
 });
 
-function updateThresholdLine() {
-  const pct  = (earThreshold / 0.40) * 100;
-  document.getElementById('threshLine').style.left = pct + '%';
+function updateThreshLine() {
+  const pct = (earThreshold / 0.40) * 100;
+  document.getElementById('threshMark').style.left = pct + '%';
 }
-updateThresholdLine();
+updateThreshLine();
 
-// ── ALERT SOUND (continuous beeping while drowsy) ────────────────────────────
-let beepInterval = null;
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clockEl').textContent = new Date().toTimeString().slice(0,8);
+  if (sessionStart && running) {
+    const s = Math.floor((Date.now() - sessionStart) / 1000);
+    document.getElementById('statDur').textContent =
+      Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+  }
+}, 1000);
 
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
 function singleBeep() {
   try {
     if (!alertBeepCtx) alertBeepCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc  = alertBeepCtx.createOscillator();
     const gain = alertBeepCtx.createGain();
-    osc.connect(gain);
-    gain.connect(alertBeepCtx.destination);
-    osc.type            = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.3, alertBeepCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, alertBeepCtx.currentTime + 0.4);
-    osc.start();
-    osc.stop(alertBeepCtx.currentTime + 0.4);
+    osc.connect(gain); gain.connect(alertBeepCtx.destination);
+    osc.type = 'sine'; osc.frequency.value = 740;
+    gain.gain.setValueAtTime(0.25, alertBeepCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, alertBeepCtx.currentTime + 0.35);
+    osc.start(); osc.stop(alertBeepCtx.currentTime + 0.35);
   } catch(e) {}
 }
+function startBeep() { if (beepInterval) return; singleBeep(); beepInterval = setInterval(singleBeep, 600); }
+function stopBeep()  { clearInterval(beepInterval); beepInterval = null; }
 
-function playAlertBeep() {
-  if (beepInterval) return;   // already beeping
-  singleBeep();
-  beepInterval = setInterval(singleBeep, 600);  // beep every 600ms
-}
-
-function stopAlertBeep() {
-  if (beepInterval) {
-    clearInterval(beepInterval);
-    beepInterval = null;
-  }
-}
-
-// ── START MONITORING ─────────────────────────────────────────────────────────
+// ── START ─────────────────────────────────────────────────────────────────────
 async function startMonitoring() {
   try {
-    // Get webcam
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 } }
+    });
     videoEl.srcObject = stream;
     videoEl.play();
     await new Promise(r => videoEl.onloadeddata = r);
 
-    // Size canvases to match video
-    outputCanvas.width  = captureCanvas.width  = videoEl.videoWidth;
-    outputCanvas.height = captureCanvas.height = videoEl.videoHeight;
+    outCanvas.width = capCanvas.width = videoEl.videoWidth;
+    outCanvas.height = capCanvas.height = videoEl.videoHeight;
 
-    // Hide placeholder, show canvas
     document.getElementById('noFeed').style.display = 'none';
-    outputCanvas.style.display = 'block';
+    outCanvas.style.display = 'block';
 
-    // Connect WebSocket
     ws = new WebSocket(`ws://${window.location.host}/ws`);
 
     ws.onopen = () => {
-      setConnected(true);
-      running      = true;
+      setConn(true);
+      running = true;
       sessionStart = Date.now();
       document.getElementById('btnStart').style.display = 'none';
       document.getElementById('btnStop').style.display  = 'block';
       addLog('Session started');
-      startTimer();
-      // Wait for video to fully render before capturing frames
-      setTimeout(() => sendFrame(), 300);
+      setTimeout(() => sendFrame(), 200);
     };
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      renderFrame(data.frame);
-      updateMetrics(data.metrics);
-      // Only send next frame AFTER receiving response — prevents queue buildup
+    ws.onmessage = e => {
+      const d = JSON.parse(e.data);
+      renderFrame(d.frame);
+      updateMetrics(d.metrics);
       if (running) sendFrame();
     };
 
+    ws.onclose = () => { setConn(false); addLog('Connection closed'); };
     ws.onerror = () => addLog('Connection error');
-    ws.onclose = () => {
-      setConnected(false);
-      addLog('Connection closed');
-    };
 
-  } catch(err) {
-    alert('Could not access webcam: ' + err.message);
-  }
+  } catch(err) { alert('Webcam error: ' + err.message); }
 }
 
-// ── SEND FRAME TO BACKEND ────────────────────────────────────────────────────
 function sendFrame() {
   if (!running || !ws || ws.readyState !== WebSocket.OPEN) return;
-
-  // Draw current video frame to hidden canvas
   capCtx.drawImage(videoEl, 0, 0);
-
-  // Get as JPEG base64 (quality 0.7 = good balance of speed vs quality)
-  const b64 = captureCanvas.toDataURL('image/jpeg', 0.7).split(',')[1];
-
-  ws.send(JSON.stringify({
-    frame         : b64,
-    ear_threshold : earThreshold,
-    closed_frames : closedFrames
-  }));
-
-  // FPS calculation
+  // 0.65 quality = best balance on CPU — smaller payload, faster WebSocket transfer
+  const b64 = capCanvas.toDataURL('image/jpeg', 0.65).split(',')[1];
+  ws.send(JSON.stringify({ frame: b64, ear_threshold: earThreshold, closed_frames: closedFrames }));
   frameCount++;
   const now = Date.now();
   if (now - lastFpsTime >= 1000) {
-    document.getElementById('fpsBadge').textContent = frameCount + ' FPS';
-    frameCount  = 0;
-    lastFpsTime = now;
+    document.getElementById('fpsChip').textContent = frameCount + ' fps';
+    frameCount = 0; lastFpsTime = now;
   }
-  // NOTE: next frame is sent only after response received in ws.onmessage
 }
 
-// ── RENDER ANNOTATED FRAME ───────────────────────────────────────────────────
 function renderFrame(b64) {
   const img = new Image();
-  img.onload = () => ctx.drawImage(img, 0, 0);
+  img.onload = () => outCtx.drawImage(img, 0, 0, outCanvas.width, outCanvas.height);
   img.src = 'data:image/jpeg;base64,' + b64;
 }
 
-// ── UPDATE METRICS UI ────────────────────────────────────────────────────────
-let lastAlertCount  = 0;
-let lastAlertActive = false;
-
+// ── METRICS ───────────────────────────────────────────────────────────────────
 function updateMetrics(m) {
-  // EAR value + color
-  const earEl = document.getElementById('earVal');
-  earEl.textContent = m.ear.toFixed(3);
-  earEl.className   = 'ear-value';
-  if (m.ear < earThreshold)        earEl.classList.add('danger');
-  else if (m.ear < earThreshold + 0.05) earEl.classList.add('warning');
+  const ear = m.ear;
+  const isAlert = m.alert_active;
+  const isDrowsy = m.drowsy;
 
-  // EAR bar
-  const pct = Math.min((m.ear / 0.40) * 100, 100);
-  const bar  = document.getElementById('earBar');
-  bar.style.width      = pct + '%';
-  bar.style.background = m.ear < earThreshold
-    ? 'var(--danger)'
-    : m.ear < earThreshold + 0.05
-      ? 'var(--warn)'
-      : 'var(--safe)';
+  // EAR big number
+  const earEl = document.getElementById('earBigNum');
+  earEl.textContent = ear.toFixed(3);
+  earEl.className = 'ear-big-num ' + (ear < earThreshold ? 'danger' : ear < earThreshold + 0.04 ? 'warn' : 'safe');
+
+  // EAR fill bar
+  const pct = Math.min((ear / 0.40) * 100, 100);
+  const fill = document.getElementById('earFill');
+  fill.style.width = pct + '%';
+  fill.style.background = ear < earThreshold ? 'var(--danger)' : ear < earThreshold+0.04 ? 'var(--warn)' : 'var(--teal)';
+
+  // Left/right individual values
+  const leftPct  = Math.min(((m.left_ear  || ear) / 0.40) * 100, 100);
+  const rightPct = Math.min(((m.right_ear || ear) / 0.40) * 100, 100);
+  const leftFill  = document.getElementById('leftFill');
+  const rightFill = document.getElementById('rightFill');
+  leftFill.style.width   = leftPct + '%';
+  rightFill.style.width  = rightPct + '%';
+  leftFill.style.background  = fill.style.background;
+  rightFill.style.background = fill.style.background;
+  document.getElementById('leftVal').textContent  = (m.left_ear  || ear).toFixed(3);
+  document.getElementById('rightVal').textContent = (m.right_ear || ear).toFixed(3);
+
+  // Frames bar
+  const fpct = Math.min((m.closed_frames / closedFrames) * 100, 100);
+  document.getElementById('framesFill').style.width = fpct + '%';
+  document.getElementById('framesFill').style.background = fpct > 60 ? 'var(--danger)' : 'var(--warn)';
+  document.getElementById('framesLabel').textContent = m.closed_frames;
 
   // Stats
   document.getElementById('statAlerts').textContent = m.total_alerts;
-  document.getElementById('statFrames').textContent = m.closed_frames;
 
-  const statusEl = document.getElementById('statStatus');
+  // Status
+  const statEl = document.getElementById('statStatus');
   if (!m.face_detected) {
-    statusEl.style.color = 'var(--muted)';
-    statusEl.textContent = 'NO FACE';
-  } else if (m.drowsy) {
-    statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = 'DROWSY';
-  } else if (m.ear < earThreshold) {
-    statusEl.style.color = 'var(--warn)';
-    statusEl.textContent = 'CLOSING';
+    statEl.textContent = 'NO FACE'; statEl.className = 'stat-num';
+    document.getElementById('orbFaceTxt').textContent = 'No Face';
+    document.getElementById('orbFace').className = 'status-orb';
+  } else if (isDrowsy) {
+    statEl.textContent = 'DROWSY'; statEl.className = 'stat-num danger';
+    document.getElementById('orbFaceTxt').textContent = 'Face Detected';
+    document.getElementById('orbFace').className = 'status-orb on';
+  } else if (ear < earThreshold) {
+    statEl.textContent = 'CLOSING'; statEl.className = 'stat-num';
+    statEl.style.color = 'var(--warn)';
+    document.getElementById('orbFace').className = 'status-orb on';
+    document.getElementById('orbFaceTxt').textContent = 'Face Detected';
   } else {
-    statusEl.style.color = 'var(--safe)';
-    statusEl.textContent = 'ALERT';
+    statEl.textContent = 'ALERT'; statEl.className = 'stat-num safe';
+    document.getElementById('orbFace').className = 'status-orb on';
+    document.getElementById('orbFaceTxt').textContent = 'Face Detected';
   }
 
-  // Alert overlay
-  const flash = document.getElementById('alertFlash');
-  const label = document.getElementById('alertLabel');
-  const dot   = document.getElementById('connDot');
-  if (m.alert_active) {
-    flash.classList.add('active');
-    label.classList.add('active');
+  // Alert visuals
+  const overlay = document.getElementById('videoAlertOverlay');
+  const banner  = document.getElementById('alertBanner');
+  const dot     = document.getElementById('pulseDot');
+  const r1 = document.getElementById('irisR1');
+  const r2 = document.getElementById('irisR2');
+
+  if (isAlert) {
+    overlay.classList.add('active');
+    banner.classList.add('active');
     dot.classList.add('alert');
+    r1.classList.add('alert-ring');
+    r2.classList.add('alert-ring');
+    startBeep();
   } else {
-    flash.classList.remove('active');
-    label.classList.remove('active');
+    overlay.classList.remove('active');
+    banner.classList.remove('active');
     dot.classList.remove('alert');
-    if (running) dot.classList.add('connected');
-    stopAlertBeep();   // stop beeping when eyes open
+    r1.classList.remove('alert-ring');
+    r2.classList.remove('alert-ring');
+    if (running) dot.classList.add('live');
+    stopBeep();
   }
 
-  // New alert triggered
   if (m.total_alerts > lastAlertCount) {
     lastAlertCount = m.total_alerts;
-    playAlertBeep();
-    addLog(`Alert #${m.total_alerts} — EAR: ${m.ear.toFixed(3)}`);
+    addLog(`Alert #${m.total_alerts} — EAR ${ear.toFixed(3)}`);
   }
 }
 
-// ── STOP MONITORING ──────────────────────────────────────────────────────────--
+// ── STOP ──────────────────────────────────────────────────────────────────────
 function stopMonitoring() {
   running = false;
   if (ws)     { ws.close(); ws = null; }
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-
-  setConnected(false);
+  setConn(false);
+  stopBeep();
   document.getElementById('btnStart').style.display = 'block';
   document.getElementById('btnStop').style.display  = 'none';
   document.getElementById('noFeed').style.display   = 'flex';
-  outputCanvas.style.display = 'none';
-  document.getElementById('alertFlash').classList.remove('active');
-  document.getElementById('alertLabel').classList.remove('active');
-  stopAlertBeep();   // stop beeping on session end
+  outCanvas.style.display = 'none';
+  document.getElementById('videoAlertOverlay').classList.remove('active');
+  document.getElementById('alertBanner').classList.remove('active');
   addLog('Session stopped');
 }
 
-// ── RESET SESSION ────────────────────────────────────────────────────────────
+// ── RESET ─────────────────────────────────────────────────────────────────────
 async function resetSession() {
-  try {
-    await fetch('/reset', { method: 'POST' });
-  } catch(e) {}
+  try { await fetch('/reset', { method:'POST' }); } catch(e) {}
   lastAlertCount = 0;
-  sessionStart   = running ? Date.now() : null;
+  sessionStart = running ? Date.now() : null;
   document.getElementById('statAlerts').textContent = '0';
-  document.getElementById('statFrames').textContent = '0';
-  document.getElementById('earVal').textContent     = '0.000';
-  document.getElementById('alertLog').innerHTML     = '<div class="log-entry"><span class="time">--:--:--</span><span>Session reset</span></div>';
+  document.getElementById('statDur').textContent    = '0:00';
+  document.getElementById('logScroll').innerHTML =
+    '<div class="log-item"><span class="lt">--:--</span><span>Session reset</span></div>';
 }
 
-// ── TIMER ────────────────────────────────────────────────────────────────────
-function startTimer() {
-  setInterval(() => {
-    if (!sessionStart || !running) return;
-    const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
-    const m = Math.floor(elapsed / 60);
-    const s = elapsed % 60;
-    document.getElementById('statDuration').textContent  =
-      m + ':' + String(s).padStart(2, '0');
-    document.getElementById('timeDisplay').textContent =
-      new Date().toTimeString().slice(0,8);
-  }, 1000);
-}
-
-// ── HELPERS ──────────────────────────────────────────────────────────────────
-function setConnected(val) {
-  const dot  = document.getElementById('connDot');
-  const text = document.getElementById('connText');
-  dot.className  = 'status-dot' + (val ? ' connected' : '');
-  text.textContent = val ? 'CONNECTED' : 'DISCONNECTED';
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function setConn(val) {
+  const dot = document.getElementById('pulseDot');
+  const lbl = document.getElementById('connLabel');
+  const orb = document.getElementById('orbConn');
+  const oTxt = document.getElementById('orbConnTxt');
+  dot.className = 'pulse-dot' + (val ? ' live' : '');
+  lbl.textContent = val ? 'live' : 'offline';
+  orb.className = 'status-orb' + (val ? ' on' : '');
+  oTxt.textContent = val ? 'Connected' : 'Disconnected';
+  oTxt.className = 'status-text' + (val ? ' on' : '');
 }
 
 function addLog(msg) {
-  const log   = document.getElementById('alertLog');
-  const time  = new Date().toTimeString().slice(0,8);
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="time">${time}</span><span class="event">${msg}</span>`;
-  log.prepend(entry);
-  // Keep only last 20 entries
-  while (log.children.length > 20) log.removeChild(log.lastChild);
+  const s = document.getElementById('logScroll');
+  const t = new Date().toTimeString().slice(0,5);
+  const d = document.createElement('div');
+  d.className = 'log-item';
+  d.innerHTML = `<span class="lt">${t}</span><span class="lm">${msg}</span>`;
+  s.prepend(d);
+  while (s.children.length > 20) s.removeChild(s.lastChild);
 }
 </script>
 </body>
