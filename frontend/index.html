@@ -513,8 +513,10 @@ function updateThresholdLine() {
 }
 updateThresholdLine();
 
-// ── ALERT SOUND (Web Audio API — no external file needed) ────────────────────
-function playAlertBeep() {
+// ── ALERT SOUND (continuous beeping while drowsy) ────────────────────────────
+let beepInterval = null;
+
+function singleBeep() {
   try {
     if (!alertBeepCtx) alertBeepCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc  = alertBeepCtx.createOscillator();
@@ -528,6 +530,19 @@ function playAlertBeep() {
     osc.start();
     osc.stop(alertBeepCtx.currentTime + 0.4);
   } catch(e) {}
+}
+
+function playAlertBeep() {
+  if (beepInterval) return;   // already beeping
+  singleBeep();
+  beepInterval = setInterval(singleBeep, 600);  // beep every 600ms
+}
+
+function stopAlertBeep() {
+  if (beepInterval) {
+    clearInterval(beepInterval);
+    beepInterval = null;
+  }
 }
 
 // ── START MONITORING ─────────────────────────────────────────────────────────
@@ -566,8 +581,8 @@ async function startMonitoring() {
       const data = JSON.parse(event.data);
       renderFrame(data.frame);
       updateMetrics(data.metrics);
-      // Only send next frame AFTER receiving this response
-      if (running) requestAnimationFrame(sendFrame);
+      // Only send next frame AFTER receiving response — prevents queue buildup
+      if (running) sendFrame();
     };
 
     ws.onerror = () => addLog('Connection error');
@@ -605,8 +620,7 @@ function sendFrame() {
     frameCount  = 0;
     lastFpsTime = now;
   }
-
-  //requestAnimationFrame(sendFrame);
+  // NOTE: next frame is sent only after response received in ws.onmessage
 }
 
 // ── RENDER ANNOTATED FRAME ───────────────────────────────────────────────────
@@ -670,6 +684,7 @@ function updateMetrics(m) {
     label.classList.remove('active');
     dot.classList.remove('alert');
     if (running) dot.classList.add('connected');
+    stopAlertBeep();   // stop beeping when eyes open
   }
 
   // New alert triggered
@@ -693,6 +708,7 @@ function stopMonitoring() {
   outputCanvas.style.display = 'none';
   document.getElementById('alertFlash').classList.remove('active');
   document.getElementById('alertLabel').classList.remove('active');
+  stopAlertBeep();   // stop beeping on session end
   addLog('Session stopped');
 }
 
