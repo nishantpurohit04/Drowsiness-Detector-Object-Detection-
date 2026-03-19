@@ -227,7 +227,7 @@ BROWSER                              BACKEND
 
 ---
 
-## 🗣️ How to Explain It in One Paragraph
+## 🗣️ Summary
 
 > *"DrowsGuard watches your eyes through a webcam in real time. It uses a library called dlib to locate 68 precise points on your face. From those points, it calculates a value called EAR — Eye Aspect Ratio — which mathematically measures how open your eyes are. A normal blink is too quick to trigger anything. But if your EAR drops below the threshold and stays there for about half a second, the system concludes you're drowsy and immediately fires a visual and audio alert. Everything runs in the browser — no app to install, no GPU needed, just a laptop and a webcam."*
 
