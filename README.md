@@ -33,10 +33,10 @@ EAR = (||P2-P6|| + ||P3-P5||) / (2 × ||P1-P4||)
 | EAR Value | Eye State |
 |---|---|
 | ≈ 0.30 | Eyes fully open |
-| 0.25 – 0.28 | Eyes closing |
-| < 0.25 | Eyes closed → alert triggered |
+| 0.20 – 0.25 | Eyes closing |
+| < 0.20 | Eyes closed → alert triggered |
 
-If EAR stays below **0.25** for **20 consecutive frames** → Drowsiness alert triggered.
+If EAR stays below **0.20** for **10 consecutive frames** → Drowsiness alert triggered.
 
 ---
 
