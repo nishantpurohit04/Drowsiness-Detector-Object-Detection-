@@ -9,14 +9,17 @@ import cv2
 import base64
 import json
 import numpy as np
+from pathlib import Path
 from fastapi             import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses   import FileResponse
-import os
 
 from detector import DrowsinessDetector
 
+# ── PATHS ────────────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 # ── APP SETUP ────────────────────────────────────────────────────────────────
 app = FastAPI(title="DrowsGuard API", version="1.0.0")
@@ -31,8 +34,7 @@ app.add_middleware(
 )
 
 # Serve frontend files
-frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
-app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 # ── DETECTOR INSTANCE ────────────────────────────────────────────────────────
@@ -45,7 +47,7 @@ detector = DrowsinessDetector()
 @app.get("/")
 async def root():
     """Serve the frontend HTML page."""
-    return FileResponse(os.path.join(frontend_path, "index.html"))
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 @app.get("/health")
@@ -130,4 +132,4 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     print("Starting DrowsGuard server on http://localhost:8000")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
